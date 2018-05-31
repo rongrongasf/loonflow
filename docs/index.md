@@ -34,7 +34,7 @@ python manage.py migrate
 - 创建初始账户: python manage.py createsuperuser
 - python manage.py collectstatic
 - 建议使用nginx+uwsgi部署
-- 启动celery任务: celery -A tasks worker -l -c 8 info -Q loonflow   # -c参数为启动的celery进程数，可自行视情况调整
+- 启动celery任务: celery multi start -A tasks worker -l info -c 8 -Q loonflow --logfile=xxx.log --pidfile=xxx.pid   # -c参数为启动的celery进程数， logfile为日志文件路径, pidfile为pid文件路径，可自行视情况调整
 
 
 ## 术语定义 
@@ -45,6 +45,10 @@ python manage.py migrate
 子工单:主要用于工单流转存在子集的情况，如在项目开发周期中存在项目周期和应用周期两个层级， 当项目处于开发中时，项目的多个涉及应用在项目开发中可能正处于不同的阶段(代码编写、静态扫描、单元测试、完成开发等状态)。当应用状态都完成开发时将触发项目的状态到提测中。在这个场景中应用的工单即为项目工单的子工单。 应用工单的父状态即为项目的“开发中”
 
 子工作流:工作流的父子层级不体现在工作流记录中，而体现在状态记录中。在配置工作流时，可以给某个工作流的某个状态设置一个子工作流。可以在工作流的不同状态设置不同的子工作流。
+
+流程图:为了方便用户了解工作流的流转规则，可以通过流程图的方式展示给用户，如下
+![admin_homapage](/docs/images/workflow_chart.png)
+
 
 转交:正常情况下工单的流转都是按照其对应工作流设定的规则来流转(状态、处理人类型、处理人等).在实际操作中，比如A提交了个工单，到达运维处理中状态，B接单处理，B在处理过程中发现自己其实处理不了，需要C才能处理。于是将工单转交给C。
 
@@ -63,17 +67,41 @@ LOONFLOW 分为两部分:
 1. 登录后台
 - 使用部署过程中创建的用户名密码 http://127.0.0.1:8000/admin (或生产部署后的地址http://www.xxx.com/admin) 
 2. 管理后台基本功能
-loonflow后台管理系统分为三个部分(为了早点上线开源，所有后台管理系统使用了django admin。将在v0.3版本重写管理界面):
+
+    loonflow后台管理系统分为三个部分(为了早点上线开源，所有后台管理系统使用了django admin。将在v0.3版本重写管理界面):
 - 工作流:工作流的配置,包括工作流记录、工作流的流转配置、工作流状态的配置、工作流自定义字段的配置、自定义通知脚本(用于工单流转过程中的消息通知相关人员)
+
 - 工单:具体的工单记录，此部分正常情况下是不需要修改的，只有在需要人工干预工单流转的时候可以修改（当然你也可以直接修改数据库）
 - 账户:用户信息,包括用户、用户角色、角色、部门以及调用token（用于api调用的授权）。在开始具体的工作流配置时，需要将你所在单位的用户、角色、用户角色、部门信息同步到loonflow中(建议写个脚本定时同步)
 ![admin_homapage](/docs/images/admin_homapage.png)
 3. 工作流配置
 - 同步账户中用户、角色、用户角色(用户具有的角色)、部门信息
+
+    请根据相关表结构自行编写定时任务脚来同步你所在企业的账户信息
+- 上传必要的脚本(如自动赋权、自动开通账号等脚本，可用于实现工单审批通过后自动赋权、自动开通账号)
+
 - 新建工作流
-- 新建工作流的自定义字段(如果需要的话):工单默认只提供id、流水号、标题、当前状态、当前处理人类型、当前处理人、创建时间、修改时间等字段。不同类型的工单可能需要不同的自定义字段，可以在此处给相应的工作流配置自定义字段
-- 设置工作流的状态: 工作流对应多个字段（发起人新建中、领导审批中、技术人员处理中、已结束等等）。 如果状态需要配置子工作流，必须设置该状态的处理人类型为1，处理人为loonrobot
+![admin_homapage](/docs/images/workflow_config.png)
+- 上传工作流脚本
+
+    loonflow支持给状态配置脚本处理(见“设置工作流状态”)，当工单流转到该状态时将自动执行脚本任务
+![admin_homapage](/docs/images/workflow_script.png)
+- 新建工作流的自定义字段
+
+    工单默认只提供id、流水号、标题、当前状态、当前处理人类型、当前处理人、创建时间、修改时间等字段。不同类型的工单可能需要不同的自定义字段，可以在此处给相应的工作流配置自定义字段
+    ![admin_homapage](/docs/images/workflow_custom_field.jpg)
+    ![admin_homapage](/docs/images/workflow_custom_field2.jpg)
+
+- 设置工作流的状态
+    工作流对应多个字段（发起人新建中、领导审批中、技术人员处理中、已结束等等）。 如果状态需要配置子工作流，必须设置该状态的处理人类型为1，处理人为loonrobot
+    ![admin_homapage](/docs/images/workflow_state1.jpg)
+    ![admin_homapage](/docs/images/workflow_state2.jpg)
+    ![admin_homapage](/docs/images/workflow_state3.jpg)
+
 - 设置工作流流转: 工作流流转控制工单状态的变化，流转的名称即工单处理中的按钮的名称，用户点击工单后，系统通过此表中的配置获取到下个状态信息，以更新工单的状态以及做相应的其他操作(执行脚本、通知相关人员等等)
+![admin_homapage](/docs/images/workflow_transition1.jpg)
+![admin_homapage](/docs/images/workflow_transition2.jpg)
+![admin_homapage](/docs/images/workflow_transition3.jpg)
 
 #### 注意
 -  当某个状态的参与人配置为脚本时，其直连下个状态只能有一个。因为脚本执行完成后会只获取一个下个状态来自动流转
